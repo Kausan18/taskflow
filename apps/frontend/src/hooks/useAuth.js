@@ -17,8 +17,9 @@ export const useAuth = () => {
     navigate('/tasks');
   };
 
-  const register = async (orgName, email, password) => {
-    const { accessToken: token, user: userData } = await authApi.register(orgName, email, password);
+  // FIX: register now accepts fullName and forwards it to the API layer
+  const register = async (orgName, fullName, email, password) => {
+    const { accessToken: token, user: userData } = await authApi.register(orgName, fullName, email, password);
     setAuth(userData, token);
     navigate('/tasks');
   };
