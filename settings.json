@@ -1,0 +1,16 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "tailwindCSS.experimental.classRegex": [
+    ["clsx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
+  ],
+  "files.associations": {
+    "*.env*": "dotenv"
+  },
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  }
+}
