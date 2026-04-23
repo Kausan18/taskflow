@@ -1,37 +1,136 @@
-{
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "TaskFlow API server",
-  "main": "src/app.js",
-  "type": "commonjs",
-  "scripts": {
-    "dev": "nodemon src/app.js",
-    "start": "node src/app.js",
-    "db:migrate": "prisma migrate deploy",
-    "db:generate": "prisma generate",
-    "db:seed": "node prisma/seed.js",
-    "db:studio": "prisma studio"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.14.0",
-    "axios": "^1.7.2",
-    "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.6",
-    "cors": "^2.8.5",
-    "express": "^5.0.0",
-    "express-rate-limit": "^7.3.1",
-    "helmet": "^7.1.0",
-    "ioredis": "^5.4.1",
-    "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0",
-    "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
-    "rate-limit-redis": "^4.2.0",
-    "uuid": "^10.0.0",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.4",
-    "prisma": "^5.14.0"
-  }
+// ── Prisma schema for TaskFlow ───────────────────────────────────────────────
+// Place this file at: apps/backend/prisma/schema.prisma
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  HIGH
+  MED
+  LOW
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model Organisation {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  tasks        Task[]
+  auditLogs    AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@map("organisations")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  orgId        String
+  email        String   @unique
+  name         String
+  passwordHash String?
+  role         Role     @default(MEMBER)
+  oauthProvider String?
+  oauthId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org           Organisation   @relation(fields: [orgId], references: [id])
+  createdTasks  Task[]         @relation("TaskCreator")
+  assignedTasks Task[]         @relation("TaskAssignee")
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model Task {
+  id          String      @id @default(uuid())
+  orgId       String
+  creatorId   String
+  assigneeId  String?
+  title       String
+  description String?
+  status      TaskStatus  @default(TODO)
+  priority    TaskPriority @default(LOW)
+  category    String?
+  dueDate     DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  org      Organisation @relation(fields: [orgId], references: [id])
+  creator  User         @relation("TaskCreator",  fields: [creatorId],  references: [id])
+  assignee User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([orgId])
+  @@index([creatorId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  orgId          String
+  userId         String
+  action         String
+  entityType     String
+  entityId       String
+  beforeSnapshot Json?
+  afterSnapshot  Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  org  Organisation @relation(fields: [orgId],  references: [id])
+  user User         @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String
+  orgId      String
+  tokenHash  String   @unique
+  familyId   String
+  revoked    Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id])
+  org  Organisation @relation(fields: [orgId],  references: [id])
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
 }
