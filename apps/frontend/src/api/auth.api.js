@@ -1,9 +1,13 @@
+// apps/frontend/src/api/auth.api.js
+// FIX: register() was missing the `name` (fullName) parameter.
+// The backend expects { orgName, name, email, password } — name was never sent.
+
 import axiosClient from './axiosClient.js';
 
 /**
  * Log in a user
- * @param {string} email 
- * @param {string} password 
+ * @param {string} email
+ * @param {string} password
  * @returns {Promise<{accessToken: string, user: Object}>}
  */
 export const login = async (email, password) => {
@@ -13,13 +17,14 @@ export const login = async (email, password) => {
 
 /**
  * Register a new user and organization
- * @param {string} orgName 
- * @param {string} email 
- * @param {string} password 
+ * @param {string} orgName
+ * @param {string} name      - FIX: was missing, backend requires this field
+ * @param {string} email
+ * @param {string} password
  * @returns {Promise<{accessToken: string, user: Object}>}
  */
-export const register = async (orgName, email, password) => {
-  const response = await axiosClient.post('/auth/register', { orgName, email, password });
+export const register = async (orgName, name, email, password) => {
+  const response = await axiosClient.post('/auth/register', { orgName, name, email, password });
   return response.data;
 };
 
@@ -33,7 +38,7 @@ export const logout = async () => {
 };
 
 /**
- * Refresh the access token
+ * Refresh the access token using the HTTP-only refresh cookie
  * @returns {Promise<{accessToken: string}>}
  */
 export const refreshToken = async () => {
