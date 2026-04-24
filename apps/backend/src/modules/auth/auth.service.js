@@ -13,20 +13,18 @@ const redis = require('../../config/redis');
 
 const prisma = new PrismaClient();
 
-// Helper to generate a URL-friendly slug from an org name
 function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-// Refresh token cookie options — HTTP-only, SameSite=Strict, Secure in prod
 function refreshCookieOptions() {
   const secure = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
     sameSite: secure ? 'strict' : 'lax',
     secure,
-    maxAge: parseInt(process.env.REFRESH_TOKEN_TTL || '604800') * 1000, // ms
-    path:   '/api/auth/refresh',
+    maxAge: parseInt(process.env.REFRESH_TOKEN_TTL || '604800') * 1000,
+    path: '/api/auth/refresh',
   };
 }
 
@@ -34,16 +32,14 @@ function refreshCookieOptions() {
  * Register a new organisation + first admin user.
  */
 async function register({ orgName, name, email, password }) {
-  // Check for duplicate email
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw Object.assign(new Error('Email already registered'), { status: 409 });
   }
 
   const slug = slugify(orgName);
-  // Ensure slug uniqueness
   const slugExists = await prisma.organisation.findUnique({ where: { slug } });
-  const finalSlug  = slugExists ? `${slug}-${Date.now()}` : slug;
+  const finalSlug = slugExists ? `${slug}-${Date.now()}` : slug;
 
   const org = await prisma.organisation.create({
     data: { name: orgName, slug: finalSlug },
@@ -58,36 +54,43 @@ async function register({ orgName, name, email, password }) {
   const { raw: refreshRaw } = await createRefreshToken(user.id, org.id);
 
   await logEvent({
-    orgId:      org.id,
-    userId:     user.id,
-    action:     'auth:register',
+    orgId: org.id,
+    userId: user.id,
+    action: 'auth:register',
     entityType: 'user',
-    entityId:   user.id,
-    after:      { email, orgName },
+    entityId: user.id,
+    after: { email, orgName },
   });
 
   return { accessToken, refreshRaw, user: safeUser(user) };
 }
 
 /**
- * Email + password login with:
- *  - failure counting in Redis
- *  - CAPTCHA enforcement after 3 failures
- *  - account lockout after 5 failures (30 min)
+ * Email + password login with full security pipeline:
+ * 1. IP lockout check (Redis)
+ * 2. Failure count + CAPTCHA enforcement after 3 failures
+ * 3. Constant-time bcrypt compare (timing attack prevention)
+ * 4. Account lockout after 5 failures (30 min)
+ * 5. RS256 JWT pair issuance
+ * 6. Token family tracking
+ * 7. Security event log
  */
 async function login({ email, password, captchaToken }, ip) {
-  const failKey  = `login:failures:${ip}`;
-  const lockKey  = `login:locked:${ip}`;
+  const failKey = `login:failures:${ip}`;
+  const lockKey = `login:locked:${ip}`;
 
-  // Check lockout
+  // Step 1: Check IP lockout
   const isLocked = await redis.get(lockKey);
   if (isLocked) {
-    throw Object.assign(new Error('Account temporarily locked — try again in 30 minutes'), { status: 429 });
+    throw Object.assign(
+      new Error('Too many failed attempts — try again in 30 minutes'),
+      { status: 429 }
+    );
   }
 
   const failures = parseInt((await redis.get(failKey)) || '0');
 
-  // Require CAPTCHA after 3 failures
+  // Step 2: CAPTCHA after 3 failures
   if (failures >= 3) {
     const captchaOk = await verifyCaptcha(captchaToken);
     if (!captchaOk) {
@@ -95,21 +98,22 @@ async function login({ email, password, captchaToken }, ip) {
     }
   }
 
-  // Constant-time user lookup + bcrypt compare (prevents timing attacks)
+  // Step 3: Constant-time user lookup + bcrypt compare
   const user = await prisma.user.findUnique({ where: { email } });
 
-  // bcrypt.compare runs even if user not found (dummy hash) to prevent timing attacks
+  // Always run bcrypt.compare to prevent timing attacks (even for unknown emails)
   const dummyHash = '$2a$12$dummyhashfortimingnormalizationXXXXXXXXXXXXXXXXXXXXX';
-  const isValid   = user?.passwordHash
+  const isValid = user?.passwordHash
     ? await bcrypt.compare(password, user.passwordHash)
     : await bcrypt.compare(password, dummyHash).then(() => false);
 
   if (!user || !isValid) {
     const newCount = failures + 1;
-    await redis.setex(failKey, 15 * 60, String(newCount)); // 15-min window
+    await redis.setex(failKey, 15 * 60, String(newCount));
 
+    // Step 4: Account lockout after 5 failures
     if (newCount >= 5) {
-      await redis.setex(lockKey, 30 * 60, '1'); // 30-min lockout
+      await redis.setex(lockKey, 30 * 60, '1');
     }
     throw Object.assign(new Error('Invalid email or password'), { status: 401 });
   }
@@ -117,26 +121,28 @@ async function login({ email, password, captchaToken }, ip) {
   // Clear failure counters on success
   await redis.del(failKey, lockKey);
 
+  // Step 5 & 6: Issue RS256 JWT pair with token family tracking
   const accessToken = signAccessToken(user);
   const { raw: refreshRaw } = await createRefreshToken(user.id, user.orgId);
 
+  // Step 7: Security event log
   await logEvent({
-    orgId:      user.orgId,
-    userId:     user.id,
-    action:     'auth:login',
+    orgId: user.orgId,
+    userId: user.id,
+    action: 'auth:login',
     entityType: 'user',
-    entityId:   user.id,
-    ipAddress:  ip,
+    entityId: user.id,
+    ipAddress: ip,
   });
 
   return { accessToken, refreshRaw, user: safeUser(user) };
 }
 
 /**
- * Rotate refresh token → new access token + new refresh token.
+ * Rotate refresh token → new access + refresh token pair.
  */
 async function refresh(rawToken) {
-  const { raw: newRefreshRaw, userId, orgId } = await rotateRefreshToken(rawToken);
+  const { raw: newRefreshRaw, userId } = await rotateRefreshToken(rawToken);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw Object.assign(new Error('User not found'), { status: 401 });
@@ -146,14 +152,14 @@ async function refresh(rawToken) {
 }
 
 /**
- * Logout — revoke all refresh tokens for the user.
+ * Logout — revoke all refresh tokens for this user.
  */
 async function logout(userId) {
   await revokeAllForUser(userId);
 }
 
 /**
- * Get the current authenticated user (for /auth/me).
+ * Return the currently authenticated user (for /auth/me).
  */
 async function getMe(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
