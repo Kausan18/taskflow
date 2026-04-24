@@ -1,5 +1,6 @@
-// ── Prisma schema for TaskFlow ───────────────────────────────────────────────
-// Place this file at: apps/backend/prisma/schema.prisma
+// apps/backend/prisma/schema.prisma
+// Prisma 5 schema — url and directUrl belong HERE, not in a config file.
+// DELETE prisma.config.ts if you created it. That file is only for Prisma 6+.
 // Run: npx prisma migrate dev --name init
 
 generator client {
@@ -41,25 +42,25 @@ model Organisation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  tasks        Task[]
-  auditLogs    AuditLog[]
+  users         User[]
+  tasks         Task[]
+  auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
 
   @@map("organisations")
 }
 
 model User {
-  id           String   @id @default(uuid())
-  orgId        String
-  email        String   @unique
-  name         String
-  passwordHash String?
-  role         Role     @default(MEMBER)
+  id            String   @id @default(uuid())
+  orgId         String
+  email         String   @unique
+  name          String
+  passwordHash  String?
+  role          Role     @default(MEMBER)
   oauthProvider String?
-  oauthId      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  oauthId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   org           Organisation   @relation(fields: [orgId], references: [id])
   createdTasks  Task[]         @relation("TaskCreator")
@@ -71,19 +72,19 @@ model User {
 }
 
 model Task {
-  id          String      @id @default(uuid())
+  id          String       @id @default(uuid())
   orgId       String
   creatorId   String
   assigneeId  String?
   title       String
   description String?
-  status      TaskStatus  @default(TODO)
+  status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(LOW)
   category    String?
   dueDate     DateTime?
   deletedAt   DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   org      Organisation @relation(fields: [orgId], references: [id])
   creator  User         @relation("TaskCreator",  fields: [creatorId],  references: [id])
@@ -118,14 +119,14 @@ model AuditLog {
 }
 
 model RefreshToken {
-  id         String   @id @default(uuid())
-  userId     String
-  orgId      String
-  tokenHash  String   @unique
-  familyId   String
-  revoked    Boolean  @default(false)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  orgId     String
+  tokenHash String   @unique
+  familyId  String
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   user User         @relation(fields: [userId], references: [id])
   org  Organisation @relation(fields: [orgId],  references: [id])
