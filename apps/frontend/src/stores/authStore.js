@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { logout as apiLogout } from '../api/auth.api.js';
 import axiosClient from '../api/axiosClient.js';
 
-export const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set) => ({
   user: null,
   accessToken: null,
   isLoading: false,
@@ -15,9 +15,9 @@ export const useAuthStore = create((set, get) => ({
     try {
       await apiLogout();
     } catch (error) {
+      // Even if the API call fails, clear local state
       console.error('Logout request failed:', error);
     } finally {
-      // Always forcefully clear the auth state locally
       set({ user: null, accessToken: null });
     }
   },
@@ -25,13 +25,18 @@ export const useAuthStore = create((set, get) => ({
   initAuth: async () => {
     set({ isLoading: true });
     try {
-      // Rely on the axios interceptor to attach the current token automatically
       const response = await axiosClient.get('/auth/me');
       set({ user: response.data, isLoading: false });
-    } catch (error) {
+    } catch {
       set({ user: null, accessToken: null, isLoading: false });
     }
-  }
+  },
 }));
 
-export const selectIsAdmin = (state) => state.user?.role === 'admin';
+/**
+ * BUG FIX: Was checking role === 'admin' (lowercase)
+ * Backend Prisma enum returns 'ADMIN' (uppercase).
+ * This caused isAdmin to always be false, hiding Dashboard/Members/AuditLog for everyone.
+ */
+export const selectIsAdmin = (state) =>
+  state.user?.role === 'ADMIN' || state.user?.role === 'admin';

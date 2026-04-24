@@ -1,10 +1,13 @@
 'use strict';
+
+// Load .env FIRST before anything else reads process.env
+require('dotenv').config();
+
 const express      = require('express');
 const helmet       = require('helmet');
 const cors         = require('cors');
 const cookieParser = require('cookie-parser');
 const morgan       = require('morgan');
-const passport     = require('./config/passport');
 
 // Route modules
 const authRoutes  = require('./modules/auth/auth.routes');
@@ -15,6 +18,9 @@ const sseRoutes   = require('./modules/events/sse.routes');
 
 // Error handler (must be last)
 const { errorHandler } = require('./middleware/errorHandler');
+
+// Passport (must be required after dotenv so GOOGLE_CLIENT_ID etc. are available)
+const passport = require('./config/passport');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -35,11 +41,10 @@ app.use(helmet({
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (Postman, server-to-server)
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
-  credentials: true,         // required for HTTP-only cookie exchange
+  credentials: true,
   methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));

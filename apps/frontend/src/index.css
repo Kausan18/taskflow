@@ -3,49 +3,75 @@
 @tailwind utilities;
 
 @layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
   body {
     background-color: #13161c;
     color: #ffffff;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Remove default input/select styling */
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: inherit;
+  }
+
+  /* Date input color fix for dark mode */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+    cursor: pointer;
+  }
+
+  select option {
+    background-color: #1a1d23;
+    color: #ffffff;
   }
 }
 
-/* Custom Scrollbar Styles */
+/* ── Custom Scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #3d4050;
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #4f5366;
 }
 
-/* Application Page Fade-in Transitions */
+/* ── Page animations ────────────────────────────────────────────────────────── */
 .fade-in {
   animation: fadeIn 150ms ease-in-out forwards;
 }
 
 @keyframes fadeIn {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── Drag & Drop ────────────────────────────────────────────────────────────── */
+[draggable="true"] {
+  user-select: none;
+  -webkit-user-select: none;
 }
